@@ -15,3 +15,5 @@ async def init_indexes():
     """Create database indexes on startup."""
     await users_collection.create_index("username", unique=True)
     await users_collection.create_index("email", unique=True)
+
+orders_collection = db["orders"]

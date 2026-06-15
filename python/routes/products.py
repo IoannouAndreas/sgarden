@@ -7,9 +7,25 @@ from datetime import datetime
 from typing import Optional
 
 router = APIRouter(prefix="/api/products", tags=["products"])
-
+VALID_CATEGORIES = {"Electronics", "Accessories", "Storage", "Networking"}
 service_name = "ProductService"
 
+def validate_product_input(request: ProductRequest, is_create: bool = False) -> dict:
+    errors = {}
+
+    # name is required on creation
+    if is_create and (not request.name or not request.name.strip()):
+        errors["name"] = "Name is required and cannot be empty"
+
+    # price must be positive if provided
+    if request.price is not None and request.price <= 0:
+        errors["price"] = "Price must be a positive number"
+
+    # category must be one of the valid values if provided
+    if request.category is not None and request.category not in VALID_CATEGORIES:
+        errors["category"] = f"Category must be one of: {', '.join(sorted(VALID_CATEGORIES))}"
+
+    return errors
 
 def product_to_response(product: dict) -> dict:
     """Convert MongoDB document to API response format."""
@@ -102,11 +118,9 @@ async def get_product_stats():
     data = result[0]
     summary = data["summary"][0] if data["summary"] else {}
 
-    # Build { "Electronics": 5, "Accessories": 6 } from [{ _id: "Electronics", count: 5 }, ...]
     category_count = {
-        item["_id"]: item["count"]
+        (item["_id"] if item["_id"] is not None else "Uncategorized"): item["count"]
         for item in data["byCategory"]
-        if item["_id"] is not None
     }
 
     return {
@@ -166,6 +180,13 @@ async def get_product_by_id(product_id: str):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_product(request: ProductRequest, current_user: dict = Depends(get_current_user)):
+    errors = validate_product_input(request, is_create=True)
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Validation failed", "errors": errors}
+        )
+    
     product_doc = {
         "name": request.name,
         "description": request.description,
@@ -218,6 +239,13 @@ async def update_product_legacy(product_id: str, request: ProductRequest, curren
 
 @router.put("/{product_id}")
 async def update_product(product_id: str, request: ProductRequest, current_user: dict = Depends(get_current_user)):
+    errors = validate_product_input(request, is_create=True)
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Validation failed", "errors": errors}
+        )
+    
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
