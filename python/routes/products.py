@@ -71,6 +71,55 @@ async def search_products(
 
     return products  # Returns [] automatically if nothing matches
 
+
+@router.get("/stats")
+async def get_product_stats():
+    pipeline = [
+        {
+            "$facet": {
+                # Pipeline 1: overall price stats
+                "summary": [
+                    {
+                        "$group": {
+                            "_id": None,           # group ALL documents together
+                            "totalCount": {"$sum": 1},
+                            "averagePrice": {"$avg": "$price"},
+                            "minPrice": {"$min": "$price"},
+                            "maxPrice": {"$max": "$price"},
+                        }
+                    }
+                ],
+                # Pipeline 2: count per category
+                "byCategory": [
+                    {"$group": {"_id": "$category", "count": {"$sum": 1}}}
+                ],
+            }
+        }
+    ]
+
+    result = await products_collection.aggregate(pipeline).to_list(length=1)
+
+    if not result:
+        return {"totalCount": 0, "averagePrice": 0, "minPrice": 0, "maxPrice": 0, "categoryCount": {}}
+
+    data = result[0]
+    summary = data["summary"][0] if data["summary"] else {}
+
+    # Build { "Electronics": 5, "Accessories": 6 } from [{ _id: "Electronics", count: 5 }, ...]
+    category_count = {
+        item["_id"]: item["count"]
+        for item in data["byCategory"]
+        if item["_id"] is not None
+    }
+
+    return {
+        "totalCount": summary.get("totalCount", 0),
+        "averagePrice": round(summary.get("averagePrice", 0), 2),
+        "minPrice": summary.get("minPrice", 0),
+        "maxPrice": summary.get("maxPrice", 0),
+        "categoryCount": category_count,
+    }
+
 @router.get("")
 async def get_all_products():
     print("Fetching all products")
