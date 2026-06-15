@@ -9,11 +9,8 @@ from seed import seed_data
 from routes.auth import router as auth_router
 from routes.products import router as products_router
 from routes.users import router as users_router
-
-# CODE QUALITY ISSUE: unused variable
-APP_NAME = "SGarden Inventory API"
-DEBUG_MODE = True
-unused_config = {"key": "value", "secret": "not-so-secret"}
+from routes.alerts import router as alerts_router
+from routes.analytics import router as analytics_router
 
 
 @asynccontextmanager
@@ -49,6 +46,8 @@ app.include_router(auth_router)
 app.include_router(products_router)
 app.include_router(users_router)
 app.include_router(orders_router)
+app.include_router(alerts_router)
+app.include_router(analytics_router)
 
 
 @app.get("/api/health")
