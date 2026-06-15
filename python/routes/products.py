@@ -8,7 +8,6 @@ from typing import Optional
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
-# CODE QUALITY ISSUE: unused variable
 service_name = "ProductService"
 
 
@@ -77,11 +76,10 @@ async def get_product_stats():
     pipeline = [
         {
             "$facet": {
-                # Pipeline 1: overall price stats
                 "summary": [
                     {
                         "$group": {
-                            "_id": None,           # group ALL documents together
+                            "_id": None,           
                             "totalCount": {"$sum": 1},
                             "averagePrice": {"$avg": "$price"},
                             "minPrice": {"$min": "$price"},
@@ -89,7 +87,6 @@ async def get_product_stats():
                         }
                     }
                 ],
-                # Pipeline 2: count per category
                 "byCategory": [
                     {"$group": {"_id": "$category", "count": {"$sum": 1}}}
                 ],
@@ -121,13 +118,38 @@ async def get_product_stats():
     }
 
 @router.get("")
-async def get_all_products():
-    print("Fetching all products")
-    products = []
+async def get_all_products(
+    page: Optional[int] = 1,
+    limit: Optional[int] = 10,
+    sort: Optional[str] = None,
+    order: Optional[str] = "asc",
+):
+    # How many products to skip (e.g. page 2 with limit 5 → skip 5)
+    skip = (page - 1) * limit
+
+    # MongoDB sort direction: 1 = ascending, -1 = descending
+    sort_direction = 1 if order == "asc" else -1
+
+    # Count total products for the metadata
+    total = await products_collection.count_documents({})
+
+    # Build the query: sort if requested, then paginate
     cursor = products_collection.find()
+    if sort:
+        cursor = cursor.sort(sort, sort_direction)
+    cursor = cursor.skip(skip).limit(limit)
+
+    products = []
     async for product in cursor:
         products.append(product_to_response(product))
-    return products
+
+    # Return structured response with metadata
+    return {
+        "data": products,   # products for this page
+        "page": page,       # current page
+        "limit": limit,     # page size
+        "total": total,     # total across ALL pages
+    }
 
 
 @router.get("/{product_id}")
