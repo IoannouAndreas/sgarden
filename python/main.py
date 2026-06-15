@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-
+from routes.orders import router as orders_router
 from config import settings
 from database import init_indexes
 from seed import seed_data
@@ -48,6 +48,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(products_router)
 app.include_router(users_router)
+app.include_router(orders_router)
 
 
 @app.get("/api/health")
