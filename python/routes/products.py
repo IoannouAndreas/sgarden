@@ -1,14 +1,20 @@
 from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi.responses import JSONResponse
 from models.product import ProductRequest, ProductResponse
 from database import products_collection
 from security.jwt_handler import get_current_user
 from bson import ObjectId
 from datetime import datetime
 from typing import Optional
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 VALID_CATEGORIES = {"Electronics", "Accessories", "Storage", "Networking"}
 service_name = "ProductService"
+
+
+class StockUpdate(BaseModel):
+    stock: int
 
 def validate_product_input(request: ProductRequest, is_create: bool = False) -> dict:
     errors = {}
@@ -166,6 +172,26 @@ async def get_all_products(
     }
 
 
+@router.patch("/{product_id}/stock")
+async def update_product_stock(product_id: str, body: StockUpdate, current_user: dict = Depends(get_current_user)):
+    if body.stock < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stock cannot be negative")
+
+    if not ObjectId.is_valid(product_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    result = await products_collection.update_one(
+        {"_id": ObjectId(product_id)},
+        {"$set": {"stock": body.stock, "updatedAt": datetime.utcnow()}},
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    product = await products_collection.find_one({"_id": ObjectId(product_id)})
+    return product_to_response(product)
+
+
 @router.get("/{product_id}")
 async def get_product_by_id(product_id: str):
     if not ObjectId.is_valid(product_id):
@@ -182,11 +208,11 @@ async def get_product_by_id(product_id: str):
 async def create_product(request: ProductRequest, current_user: dict = Depends(get_current_user)):
     errors = validate_product_input(request, is_create=True)
     if errors:
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message": "Validation failed", "errors": errors}
+            content={"message": "Validation failed", "errors": errors}
         )
-    
+
     product_doc = {
         "name": request.name,
         "description": request.description,
@@ -241,11 +267,11 @@ async def update_product_legacy(product_id: str, request: ProductRequest, curren
 async def update_product(product_id: str, request: ProductRequest, current_user: dict = Depends(get_current_user)):
     errors = validate_product_input(request, is_create=True)
     if errors:
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message": "Validation failed", "errors": errors}
+            content={"message": "Validation failed", "errors": errors}
         )
-    
+
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
