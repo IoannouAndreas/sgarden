@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Depends
 from models.order import OrderRequest
 from database import orders_collection, products_collection
 from security.jwt_handler import get_current_user
@@ -42,7 +42,7 @@ async def calculate_total(items: list) -> float:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_order(request: OrderRequest, current_user: dict = Depends(get_current_user)):
+async def create_order(request: OrderRequest, _current_user: dict = Depends(get_current_user)):
     items = [{"productId": i.productId, "quantity": i.quantity} for i in request.items]
 
     for item in items:
@@ -77,9 +77,9 @@ async def create_order(request: OrderRequest, current_user: dict = Depends(get_c
 
 
 @router.get("")
-async def get_all_orders(status: Optional[str] = Query(None)):
+async def get_all_orders(status: Optional[str] = None):
     query = {}
-    if status is not None:
+    if status:
         query["status"] = status
     orders = []
     async for order in orders_collection.find(query):
@@ -100,7 +100,7 @@ async def get_order(order_id: str):
 
 
 @router.patch("/{order_id}/status")
-async def update_order_status(order_id: str, body: StatusUpdate, current_user: dict = Depends(get_current_user)):
+async def update_order_status(order_id: str, body: StatusUpdate, _current_user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(order_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
@@ -134,7 +134,7 @@ async def update_order_status(order_id: str, body: StatusUpdate, current_user: d
 
 
 @router.put("/{order_id}")
-async def update_order(order_id: str, request: OrderRequest, current_user: dict = Depends(get_current_user)):
+async def update_order(order_id: str, request: OrderRequest, _current_user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(order_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
@@ -154,7 +154,7 @@ async def update_order(order_id: str, request: OrderRequest, current_user: dict 
 
 
 @router.delete("/{order_id}")
-async def delete_order(order_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_order(order_id: str, _current_user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(order_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 

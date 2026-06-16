@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
-from models.product import ProductRequest, ProductResponse
+from models.product import ProductRequest
 from database import products_collection
 from security.jwt_handler import get_current_user
 from bson import ObjectId
@@ -173,7 +173,7 @@ async def get_all_products(
 
 
 @router.patch("/{product_id}/stock")
-async def update_product_stock(product_id: str, body: StockUpdate, current_user: dict = Depends(get_current_user)):
+async def update_product_stock(product_id: str, body: StockUpdate, _current_user: dict = Depends(get_current_user)):
     if body.stock < 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stock cannot be negative")
 
@@ -205,7 +205,7 @@ async def get_product_by_id(product_id: str):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_product(request: ProductRequest, current_user: dict = Depends(get_current_user)):
+async def create_product(request: ProductRequest, _current_user: dict = Depends(get_current_user)):
     errors = validate_product_input(request, is_create=True)
     if errors:
         return JSONResponse(
@@ -229,7 +229,7 @@ async def create_product(request: ProductRequest, current_user: dict = Depends(g
     return product_to_response(product_doc)
 
 
-async def update_product_legacy(product_id: str, request: ProductRequest, current_user: dict = Depends(get_current_user)):
+async def update_product_legacy(product_id: str, request: ProductRequest, _current_user: dict = Depends(get_current_user)):
     """CODE QUALITY ISSUE: duplicate of update_product."""
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
@@ -264,7 +264,7 @@ async def update_product_legacy(product_id: str, request: ProductRequest, curren
 
 
 @router.put("/{product_id}")
-async def update_product(product_id: str, request: ProductRequest, current_user: dict = Depends(get_current_user)):
+async def update_product(product_id: str, request: ProductRequest, _current_user: dict = Depends(get_current_user)):
     errors = validate_product_input(request, is_create=True)
     if errors:
         return JSONResponse(
@@ -305,7 +305,7 @@ async def update_product(product_id: str, request: ProductRequest, current_user:
 
 
 @router.delete("/{product_id}")
-async def delete_product(product_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_product(product_id: str, _current_user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 

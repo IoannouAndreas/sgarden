@@ -5,7 +5,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from config import settings
 from database import users_collection
 from bson import ObjectId
-import hashlib  
 
 security = HTTPBearer(auto_error=False)
 
