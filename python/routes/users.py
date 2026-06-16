@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from database import users_collection, db
+from database import users_collection
 from security.jwt_handler import get_current_user
 from bson import ObjectId
 from datetime import datetime
@@ -42,7 +42,7 @@ def user_to_response_safe(user: dict) -> dict:
 
 
 @router.get("/profile/{user_id}")
-async def get_user_profile(user_id: str, current_user: dict = Depends(get_current_user)):
+async def get_user_profile(user_id: str, _current_user: dict = Depends(get_current_user)):
     """Get user profile - SECURITY ISSUE: exposes password hash."""
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -57,7 +57,7 @@ async def get_user_profile(user_id: str, current_user: dict = Depends(get_curren
 
 
 @router.get("/details/{user_id}")
-async def get_user_details(user_id: str, current_user: dict = Depends(get_current_user)):
+async def get_user_details(user_id: str, _current_user: dict = Depends(get_current_user)):
     """Get user details - CODE QUALITY ISSUE: duplicate of get_user_profile."""
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -189,7 +189,7 @@ async def advanced_search(
 
 
 @router.delete("/{user_id}")
-async def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_user(user_id: str, _current_user: dict = Depends(get_current_user)):
     """Delete user - SECURITY ISSUE: no admin role check."""
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -204,7 +204,7 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
 
 
 @router.put("/{user_id}/role")
-async def change_role(user_id: str, request: dict, current_user: dict = Depends(get_current_user)):
+async def change_role(user_id: str, request: dict, _current_user: dict = Depends(get_current_user)):
     """Change user role - SECURITY ISSUE: no admin role check (privilege escalation)."""
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

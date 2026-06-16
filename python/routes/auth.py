@@ -3,7 +3,6 @@ from models.user import RegisterRequest, LoginRequest, AuthResponse
 from database import users_collection
 from security.jwt_handler import create_token
 import bcrypt
-from bson import ObjectId
 from datetime import datetime
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
