@@ -20,14 +20,29 @@ class StatusUpdate(BaseModel):
     status: str
 
 
+def _serialize(value):
+    """Recursively convert ObjectId values to strings so FastAPI can serialize them.
+
+    Orders in the shared database may have items whose productId is stored as a
+    BSON ObjectId (e.g. created by the other language implementations).
+    """
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, list):
+        return [_serialize(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _serialize(v) for k, v in value.items()}
+    return value
+
+
 def order_to_response(order: dict) -> dict:
     return {
         "id": str(order["_id"]),
-        "items": order.get("items", []),
+        "items": _serialize(order.get("items", [])),
         "total": order.get("total", 0),
         "status": order.get("status", "pending"),
-        "createdAt": order.get("createdAt").isoformat() if order.get("createdAt") else None,
-        "updatedAt": order.get("updatedAt").isoformat() if order.get("updatedAt") else None,
+        "createdAt": order.get("createdAt").isoformat() if hasattr(order.get("createdAt"), "isoformat") else order.get("createdAt"),
+        "updatedAt": order.get("updatedAt").isoformat() if hasattr(order.get("updatedAt"), "isoformat") else order.get("updatedAt"),
     }
 
 
