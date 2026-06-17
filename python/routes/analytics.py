@@ -24,7 +24,13 @@ async def get_sales_analytics(
                 pass
         if endDate:
             try:
-                date_filter["createdAt"]["$lte"] = datetime.fromisoformat(endDate)
+                end_dt = datetime.fromisoformat(endDate)
+                # A date-only endDate (e.g. "2026-06-16") parses to midnight, which
+                # would exclude same-day orders created later in the day. Make the
+                # end of the range inclusive of the whole day.
+                if len(endDate) == 10:
+                    end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                date_filter["createdAt"]["$lte"] = end_dt
             except Exception:
                 pass
 
@@ -57,6 +63,9 @@ async def get_sales_analytics(
             pid = item.get("productId")
             if not pid:
                 continue
+            # Normalize to str so orders storing productId as ObjectId and as a
+            # string (across the shared DB) group under the same key.
+            pid = str(pid)
             if pid not in product_stats:
                 product_stats[pid] = {"totalQuantity": 0}
             product_stats[pid]["totalQuantity"] += item.get("quantity", 0)
@@ -65,15 +74,16 @@ async def get_sales_analytics(
 
     top_products = []
     for pid, stats in sorted_products:
+        pid_str = str(pid)
         try:
             product = await products_collection.find_one({"_id": ObjectId(pid)})
-            name = product.get("name") if product else pid
+            name = product.get("name") if product else pid_str
             price = product.get("price", 0) if product else 0
         except Exception:
-            name = pid
+            name = pid_str
             price = 0
         top_products.append({
-            "productId": pid,
+            "productId": pid_str,
             "name": name,
             "totalQuantity": stats["totalQuantity"],
             "totalRevenue": round(price * stats["totalQuantity"], 2),
