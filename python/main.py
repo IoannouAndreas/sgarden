@@ -1,20 +1,22 @@
+"""SGarden API application entry point: app setup, middleware and routing."""
+from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from routes.orders import router as orders_router
 from config import settings
 from database import init_indexes
 from seed import seed_data
 from routes.auth import router as auth_router
 from routes.products import router as products_router
 from routes.users import router as users_router
+from routes.orders import router as orders_router
 from routes.alerts import router as alerts_router
 from routes.analytics import router as analytics_router
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
+    """Run startup tasks (indexes, seeding) and handle graceful shutdown."""
     # Startup
     print("Starting SGarden API...")
     await init_indexes()
@@ -52,6 +54,7 @@ app.include_router(analytics_router)
 
 @app.get("/api/health")
 async def health():
+    """Health check endpoint."""
     return {"status": "ok"}
 
 

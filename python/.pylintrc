@@ -1,0 +1,11 @@
+[MESSAGES CONTROL]
+# too-few-public-methods: Pydantic models and settings classes are data holders
+#   and legitimately have no public methods.
+# The remaining disables cover the intentionally-planted security-demo code in
+# routes/users.py (subprocess usage, broad excepts, unencoded file reads) which
+# is kept deliberately and is out of scope for the style cleanup.
+disable=
+    too-few-public-methods,
+    broad-exception-caught,
+    subprocess-run-check,
+    unspecified-encoding
