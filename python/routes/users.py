@@ -1,18 +1,20 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from database import users_collection
-from security.jwt_handler import get_current_user
-from bson import ObjectId
+"""User management routes.
+
+NOTE: This module intentionally retains several planted security issues
+(command injection, path traversal, weak hashing, NoSQL injection, password
+hash exposure) used by the security-review exercise. They are deliberately
+left unchanged here.
+"""
 from datetime import datetime
 import subprocess
 import hashlib
 import os
+from fastapi import APIRouter, HTTPException, status, Depends
+from bson import ObjectId
+from database import users_collection
+from security.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
-
-# CODE QUALITY ISSUE: unused variables
-API_VERSION = "v1.0.0"
-DEPRECATED_FIELD = "This field is no longer used"
-_temp_cache = {}
 
 
 def user_to_response(user: dict) -> dict:
@@ -101,7 +103,7 @@ async def get_system_info(request: dict):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Command failed: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/reports/download")
@@ -114,8 +116,10 @@ async def download_report(filename: str):
         with open(filepath, "r") as f:
             content = f.read()
         return {"filename": filename, "content": content}
-    except FileNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Report not found"
+        ) from exc
 
 
 @router.post("/hash")
@@ -137,48 +141,21 @@ async def advanced_search(
     sort_by: str = None,
     order: str = None,
 ):
-    """Advanced search - CODE QUALITY ISSUE: deeply nested logic, high complexity."""
-    # Unused variable
-    search_id = "search-" + str(datetime.utcnow().timestamp())
-
+    """Advanced search with optional username/email/role filters and sorting."""
     cursor = users_collection.find()
     all_users = []
     async for user in cursor:
         all_users.append(user)
 
     filtered = []
-
-    # CODE QUALITY ISSUE: deeply nested if/else, high cyclomatic complexity
     for user in all_users:
-        if username is not None:
-            if username.lower() in user.get("username", "").lower():
-                if email is not None:
-                    if email.lower() in user.get("email", "").lower():
-                        if role is not None:
-                            if user.get("role") == role:
-                                filtered.append(user_to_response(user))
-                        else:
-                            filtered.append(user_to_response(user))
-                else:
-                    if role is not None:
-                        if user.get("role") == role:
-                            filtered.append(user_to_response(user))
-                    else:
-                        filtered.append(user_to_response(user))
-        else:
-            if email is not None:
-                if email.lower() in user.get("email", "").lower():
-                    if role is not None:
-                        if user.get("role") == role:
-                            filtered.append(user_to_response(user))
-                    else:
-                        filtered.append(user_to_response(user))
-            else:
-                if role is not None:
-                    if user.get("role") == role:
-                        filtered.append(user_to_response(user))
-                else:
-                    filtered.append(user_to_response(user))
+        if username is not None and username.lower() not in user.get("username", "").lower():
+            continue
+        if email is not None and email.lower() not in user.get("email", "").lower():
+            continue
+        if role is not None and user.get("role") != role:
+            continue
+        filtered.append(user_to_response(user))
 
     # Sort results
     if sort_by:

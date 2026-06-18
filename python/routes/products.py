@@ -1,22 +1,25 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+"""Product catalog routes: search, stats, CRUD and stock management."""
+from datetime import datetime
+from typing import Optional
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from fastapi.responses import JSONResponse
+from bson import ObjectId
+from pydantic import BaseModel
 from models.product import ProductRequest
 from database import products_collection
 from security.jwt_handler import get_current_user
-from bson import ObjectId
-from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 VALID_CATEGORIES = {"Electronics", "Accessories", "Storage", "Networking"}
-service_name = "ProductService"
 
 
 class StockUpdate(BaseModel):
+    """Payload for updating a product's stock level."""
     stock: int
 
+
 def validate_product_input(request: ProductRequest, is_create: bool = False) -> dict:
+    """Validate a product payload and return a dict of field errors."""
     errors = {}
 
     # name is required on creation
@@ -33,8 +36,11 @@ def validate_product_input(request: ProductRequest, is_create: bool = False) -> 
 
     return errors
 
+
 def product_to_response(product: dict) -> dict:
     """Convert MongoDB document to API response format."""
+    created = product.get("createdAt")
+    updated = product.get("updatedAt")
     return {
         "id": str(product["_id"]),
         "name": product.get("name"),
@@ -42,22 +48,8 @@ def product_to_response(product: dict) -> dict:
         "category": product.get("category"),
         "price": product.get("price"),
         "stock": product.get("stock", 0),
-        "createdAt": product.get("createdAt", "").isoformat() if product.get("createdAt") else None,
-        "updatedAt": product.get("updatedAt", "").isoformat() if product.get("updatedAt") else None,
-    }
-
-
-def format_product(product: dict) -> dict:
-    """CODE QUALITY ISSUE: duplicate of product_to_response above."""
-    return {
-        "id": str(product["_id"]),
-        "name": product.get("name"),
-        "description": product.get("description"),
-        "category": product.get("category"),
-        "price": product.get("price"),
-        "stock": product.get("stock", 0),
-        "createdAt": product.get("createdAt", "").isoformat() if product.get("createdAt") else None,
-        "updatedAt": product.get("updatedAt", "").isoformat() if product.get("updatedAt") else None,
+        "createdAt": created.isoformat() if hasattr(created, "isoformat") else None,
+        "updatedAt": updated.isoformat() if hasattr(updated, "isoformat") else None,
     }
 
 
@@ -65,9 +57,10 @@ def format_product(product: dict) -> dict:
 async def search_products(
     q: Optional[str] = None,
     category: Optional[str] = None,
-    minPrice: Optional[float] = None,
-    maxPrice: Optional[float] = None,
+    min_price: Optional[float] = Query(None, alias="minPrice"),
+    max_price: Optional[float] = Query(None, alias="maxPrice"),
 ):
+    """Search products by text, category and price range."""
     query = {}
 
     if q:
@@ -79,12 +72,12 @@ async def search_products(
     if category:
         query["category"] = category
 
-    if minPrice is not None or maxPrice is not None:
+    if min_price is not None or max_price is not None:
         query["price"] = {}
-        if minPrice is not None:
-            query["price"]["$gte"] = minPrice
-        if maxPrice is not None:
-            query["price"]["$lte"] = maxPrice
+        if min_price is not None:
+            query["price"]["$gte"] = min_price
+        if max_price is not None:
+            query["price"]["$lte"] = max_price
 
     products = []
     async for product in products_collection.find(query):
@@ -95,13 +88,14 @@ async def search_products(
 
 @router.get("/stats")
 async def get_product_stats():
+    """Return aggregate product statistics and per-category counts."""
     pipeline = [
         {
             "$facet": {
                 "summary": [
                     {
                         "$group": {
-                            "_id": None,           
+                            "_id": None,
                             "totalCount": {"$sum": 1},
                             "averagePrice": {"$avg": "$price"},
                             "minPrice": {"$min": "$price"},
@@ -119,7 +113,13 @@ async def get_product_stats():
     result = await products_collection.aggregate(pipeline).to_list(length=1)
 
     if not result:
-        return {"totalCount": 0, "averagePrice": 0, "minPrice": 0, "maxPrice": 0, "categoryCount": {}}
+        return {
+            "totalCount": 0,
+            "averagePrice": 0,
+            "minPrice": 0,
+            "maxPrice": 0,
+            "categoryCount": {},
+        }
 
     data = result[0]
     summary = data["summary"][0] if data["summary"] else {}
@@ -137,6 +137,7 @@ async def get_product_stats():
         "categoryCount": category_count,
     }
 
+
 @router.get("")
 async def get_all_products(
     page: Optional[int] = 1,
@@ -144,7 +145,8 @@ async def get_all_products(
     sort: Optional[str] = None,
     order: Optional[str] = "asc",
 ):
-    # How many products to skip (e.g. page 2 with limit 5 → skip 5)
+    """List products with pagination and optional sorting."""
+    # How many products to skip (e.g. page 2 with limit 5 -> skip 5)
     skip = (page - 1) * limit
 
     # MongoDB sort direction: 1 = ascending, -1 = descending
@@ -173,9 +175,17 @@ async def get_all_products(
 
 
 @router.patch("/{product_id}/stock")
-async def update_product_stock(product_id: str, body: StockUpdate, _current_user: dict = Depends(get_current_user)):
+async def update_product_stock(
+    product_id: str,
+    body: StockUpdate,
+    _current_user: dict = Depends(get_current_user),
+):
+    """Set a product's stock level, rejecting negative values."""
     if body.stock < 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stock cannot be negative")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stock cannot be negative",
+        )
 
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
@@ -194,6 +204,7 @@ async def update_product_stock(product_id: str, body: StockUpdate, _current_user
 
 @router.get("/{product_id}")
 async def get_product_by_id(product_id: str):
+    """Get a single product by its ID."""
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
@@ -206,11 +217,12 @@ async def get_product_by_id(product_id: str):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_product(request: ProductRequest, _current_user: dict = Depends(get_current_user)):
+    """Create a new product after validating the payload."""
     errors = validate_product_input(request, is_create=True)
     if errors:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": "Validation failed", "errors": errors}
+            content={"message": "Validation failed", "errors": errors},
         )
 
     product_doc = {
@@ -229,47 +241,18 @@ async def create_product(request: ProductRequest, _current_user: dict = Depends(
     return product_to_response(product_doc)
 
 
-async def update_product_legacy(product_id: str, request: ProductRequest, _current_user: dict = Depends(get_current_user)):
-    """CODE QUALITY ISSUE: duplicate of update_product."""
-    if not ObjectId.is_valid(product_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-
-    update_fields = {}
-    if request.name is not None:
-        update_fields["name"] = request.name
-    if request.description is not None:
-        update_fields["description"] = request.description
-    if request.category is not None:
-        update_fields["category"] = request.category
-    if request.price is not None:
-        update_fields["price"] = request.price
-    if request.stock is not None:
-        update_fields["stock"] = request.stock
-
-    if not update_fields:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
-
-    update_fields["updatedAt"] = datetime.utcnow()
-
-    result = await products_collection.update_one(
-        {"_id": ObjectId(product_id)},
-        {"$set": update_fields},
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-
-    product = await products_collection.find_one({"_id": ObjectId(product_id)})
-    return product_to_response(product)
-
-
 @router.put("/{product_id}")
-async def update_product(product_id: str, request: ProductRequest, _current_user: dict = Depends(get_current_user)):
+async def update_product(
+    product_id: str,
+    request: ProductRequest,
+    _current_user: dict = Depends(get_current_user),
+):
+    """Update a product after validating the payload."""
     errors = validate_product_input(request, is_create=True)
     if errors:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": "Validation failed", "errors": errors}
+            content={"message": "Validation failed", "errors": errors},
         )
 
     if not ObjectId.is_valid(product_id):
@@ -306,6 +289,7 @@ async def update_product(product_id: str, request: ProductRequest, _current_user
 
 @router.delete("/{product_id}")
 async def delete_product(product_id: str, _current_user: dict = Depends(get_current_user)):
+    """Delete a product by its ID."""
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
